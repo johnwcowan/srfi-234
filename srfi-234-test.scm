@@ -35,7 +35,7 @@
  (lambda (cont)
    (with-exception-handler
        (lambda (err)
-         (test-equal (circular-graph? err))
+         (test-assert (circular-graph? err))
          (test-equal "graph has circular dependency" (circular-graph-message err))
          (test-assert
            (or
