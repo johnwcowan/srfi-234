@@ -9,12 +9,7 @@
   <body>
     <h1><a href="https://srfi.schemers.org/"><img class="srfi-logo" src="https://srfi.schemers.org/srfi-logo.svg" alt="SRFI surfboard logo" /></a>234: Topological Sorting</h1>
 
-<p>This SRFI has complex authorship.  The original specification and
-corresponding implementation were written by Shiro Kawai for Gauche.
-This SRFI was written by John Cowan, but its design is based on the
-Gauche specification.  The implementation was written principally by
-Arvydas Silanskas based on the Gauche implementation, and then modified
-further by John Cowan to match this SRFI.</p>
+<p>John Cowan (text), Shawn Wagner (code)</p>
 
 <h2 id="status">Status</h2>
 
@@ -52,19 +47,20 @@ ordering of the steps that satisfies the partial order.</p>
 <h2 id="specification">Specification</h2>
 
 <p><code>(topological-sort </code><em>graph</em><code>)</code><br>
-<code>(topological-sort </code><em>graph =</em><code>)</code></p>
+<code>(topological-sort </code><em>graph comparator</em><code>)</code></p>
 <p>Topologically sorts <em>graph</em>,
 which is a list of connections.  Each connection is a list of the form
 <code>(</code><em>node dependency dependency</em> ...<code>)</code>,
 meaning that <em>dependencies</em> are dependent on <em>node</em>.
-The optional argument <em>=</em> specifies the identity relation
-between nodes; it defaults to <code>eqv?</code>.</p>
-<p>It is an error if the same node (in the sense of <em>=</em>) appears
-in more than one connection.<p>
-<p>If <em>graph</em> is circular, an error satisfying
-<code>circular-graph?</code> is signaled.</p>
+The optional argument <em>comparator</em> specifies the identity relation
+between nodes; it defaults to <code>eqv-comparator</code>.</p>
+<p>If the same node (in the sense of <em>comparator</em>) appears
+in the car of more than one connection, the connections are merged.<p>
+<p>If <em>graph</em> is circular, <code>#f</code> is returned.</p>
 <p>The graph shown above can be represented as
-<code>((5 11) (7 11 8) (3 8 10) (11 2 9 10) (8 9))</code>.
+<code>((5 11) (7 11 8) (3 8 10) (11 2 9 10) (8 9))</code>,
+or as a list of edges: <code>((5 11) (7 11) (7 8) (3 8) (3 10)
+(11 2) (11 9) (11 10) (8 9))</code>.
 One possible result of applying `topological-sort` to this graph
 is the list <code>(3 7 5 11 2 8 10 9)</code>, meaning that
 performing steps 3, 7, 5, ..., 10, 9 in that order will satisfy
@@ -72,10 +68,13 @@ the partial ordering of the graph.</p>
 
 <h2 id="implementation">Implementation</h2>
 
-<p>The sample implementation is available in the SRFI 234 repository.
+<p>The sample implementation is available in the SRFI 234 repository.</p>
+<p>Several other variant implementations are available: one by Shiro Kawai, written
+for Gauche; one for SLIB; and a modified version of the first by Arvydas Silanskas.</p>
+
 <h2 id="acknowledgements">Acknowledgements</h2>
 
-<p>Credit is due to the members of the SRFI 234 mailing list.</p>
+<p>Special thanks to the members of the SRFI 234 mailing list.</p>
 
 <p>
 The graph is in the public domain and is available at

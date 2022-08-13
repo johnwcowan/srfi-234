@@ -1,80 +1,83 @@
-;;; Code adapted from gauche https://github.com/shirok/Gauche/blob/master/lib/util/toposort.scm :
-;;;
-;;; srfi-234.scm - topological sorting
-;;;
-;;;  Written by Shiro Kawai (shiro@acm.org)  2001
-;;;  Public Domain..  I guess lots of Scheme programmers have already
-;;;  written similar code.
-;;;
+;;; topological sort using Kahn's algorithm.
 
+(define-record-type node
+  (make-node edges-out edges-in)
+  node?
+  (edges-out edges-out)
+  (edges-in edges-in edges-in-set!))
 
-;; error object
-(define-record-type <circular-graph>
-  (make-circular-graph message cycle)
-  circular-graph?
-  (message circular-graph-message)
-  (cycle circular-graph-cycle))
+;; Handle input with duplicate vertices, like tsort(1) input tends to have. Also clears out
+;; edges that point back to the origin vertex.
+;; ((a b) (a c) (d d)) -> ((a b c) (d))
+(define (tsort-merge-vertices dag comparator)
+  (let* ((g (make-hashtable comparator))
+         (insert-or-merge (lambda (vertex)
+                            (let*-values
+                                (((name) (car vertex))
+                                 ((b found) (hashtable-lookup g name)))
+                              (if found
+                                  (hashtable-set!
+                                   g name (append (cdr vertex) b))
+                                  (hashtable-set!
+                                   g name (cdr vertex)))))))
+    (for-each insert-or-merge dag)
+    (hashtable-map->lset g (lambda (name edges)
+                             (cons name (delete! name edges pred?))))))
 
-;;  nodes : a list of (<from> <to0> <to1> ...)
-(define topological-sort
-  (case-lambda
-    ((nodes) (topological-sort-impl nodes eqv?))
-    ((nodes eq) (topological-sort-impl nodes eq))))
+(define (tsort-build-graph dag pred?)
+  (let* ((g (make-hashtable comparator))
+         (build-node
+          (lambda (rawnode)
+            (let ((node (make-node (cdr rawnode) '())))
+              (hashtable-set! g (car rawnode) node))))
+         (add-incoming
+          (lambda (name node)
+            (let ((add
+                   (lambda (dname)
+                     (let-values
+                         (((dest found) (hashtable-lookup g dname)))
+                       (if found
+                           (edges-in-set! dest
+                                          (cons name (edges-in dest)))
+                           (hashtable-set!
+                            g dname
+                            (make-node '() (list name))))))))
+              (for-each add (edges-out node))))))
+    (for-each build-node (tsort-merge-vertices dag pred?))
+    (hashtable-walk g add-incoming)
+    g))
+    
+(define (tsort-fill-start-nodes g)
+  (let ((s (make-queue)))
+    (hashtable-walk g (lambda (name node)
+                        (if (null? (edges-in node))
+                            (enqueue! s name))))
+    s))
 
-(define (topological-sort-impl nodes eq)
-  (define table (map (lambda (n)
-                       (cons (car n) 0))
-                     nodes))
-  (define queue '())
-  (define result '())
+(define (tsort-has-edges? g)
+  (let-values (((k v match)
+                (hashtable-find g (lambda (name node)
+                                    (not (null? (edges-in node)))))))
+    match))
 
-  ;; set up - compute number of nodes that each node depends on.
-  (define (set-up)
-    (for-each
-     (lambda (node)
-       (for-each
-        (lambda (to)
-          (define p (assoc to table eq))
-          (if p
-              (set-cdr! p (+ 1 (cdr p)))
-              (set! table (cons
-                           (cons to 1)
-                           table))))
-        (cdr node)))
-     nodes))
+(define (tsort dag pred?)
+  (let* ((l (list-queue))
+         (g (tsort-build-graph dag pred?))
+         (s (tsort-fill-start-nodes g)))
+    (let loop ()
+      (if (not (queue-empty? s))
+          (let* ((name (dequeue! s))
+                 (node (hashtable-ref g name)))
+            (list-queue-add-back! l name)
+            (for-each (lambda (dest)
+                        (let ((dnode (hashtable-ref g dest)))
+                          (edges-in-set! dnode (delete name (edges-in dnode) pred?))
+                          (if (null? (edges-in dnode))
+                              (enqueue! s dest))))
+                      (edges-out node))
+            (loop))))
+    (if (tsort-has-edges? g)
+        #f
+        (list-queue-list l))))
 
-  ;; traverse
-  (define (traverse)
-    (unless (null? queue)
-      (let ((n0 (assoc (car queue) nodes eq)))
-        (set! queue (cdr queue))
-        (when n0
-          (for-each
-           (lambda (to)
-             (define p (assoc to table eq))
-             (when p
-               (let ((cnt (- (cdr p) 1)))
-                 (when (= cnt 0)
-                   (set! result (cons to result))
-                   (set! queue (cons to queue)))
-                 (set-cdr! p cnt))))
-           (cdr n0)))
-        (traverse))))
-
-  (set-up)
-  (set! queue
-    (apply append
-           (map
-            (lambda (p)
-              (if (= (cdr p) 0)
-                  (list (car p))
-                  '()))
-            table)))
-  (set! result queue)
-  (traverse)
-  (let ((rest (filter (lambda (e)
-                        (not (zero? (cdr e))))
-                      table)))
-    (unless (null? rest)
-      (raise (make-circular-graph "graph has circular dependency" (map car rest)))))
-  (reverse result))
+(define topological-sort tsort)
